@@ -1,371 +1,447 @@
+import React, { useState, useEffect, useRef } from "react";
+import ReactDOM from "react-dom/client";
 
-import React, { useEffect, useState } from "react";
-
-const cars = [
-  { id: 1, name: "Street Falcon", emoji: "🏎️", price: 0, speed: 45 },
-  { id: 2, name: "Neon Beast", emoji: "🚘", price: 500, speed: 60 },
-  { id: 3, name: "Thunder GT", emoji: "🏎️", price: 1200, speed: 75 },
-  { id: 4, name: "Shadow X", emoji: "🚗", price: 2500, speed: 90 },
+const CARS = [
+  { name: "Street Falcon", emoji: "🏎️", price: 0, speed: 5, color: "#ff4057" },
+  { name: "Neon Beast", emoji: "🏎️", price: 1500, speed: 7, color: "#39a9ff" },
+  { name: "Shadow GT", emoji: "🚘", price: 3000, speed: 9, color: "#b66cff" },
+  { name: "Golden Bullet", emoji: "🏎️", price: 6000, speed: 12, color: "#ffc84a" },
+  { name: "Phantom X", emoji: "🚗", price: 10000, speed: 15, color: "#52f5b0" },
 ];
 
-export default function App() {
+const initialGarage = [0];
+
+function App() {
+  const [screen, setScreen] = useState("home");
   const [money, setMoney] = useState(2500);
   const [level, setLevel] = useState(1);
-  const [owned, setOwned] = useState([1]);
-  const [selected, setSelected] = useState(1);
-  const [upgrades, setUpgrades] = useState({});
-  const [screen, setScreen] = useState("home");
-  const [playerProgress, setPlayerProgress] = useState(0);
-  const [rivalProgress, setRivalProgress] = useState(0);
+  const [owned, setOwned] = useState(initialGarage);
+  const [selectedCar, setSelectedCar] = useState(0);
+  const [upgrade, setUpgrade] = useState(0);
+  const [distance, setDistance] = useState(0);
+  const [opponent, setOpponent] = useState(0);
   const [racing, setRacing] = useState(false);
-  const [won, setWon] = useState(false);
-  const [message, setMessage] = useState("");
+  const [result, setResult] = useState("");
+  const [sound, setSound] = useState(true);
 
-  const car = cars.find((item) => item.id === selected) || cars[0];
-  const upgradeLevel = upgrades[selected] || 0;
-  const speed = car.speed + upgradeLevel * 10;
+  const distanceRef = useRef(0);
+  const opponentRef = useRef(0);
+  const racingRef = useRef(false);
+  const lastTime = useRef(0);
+
+  const car = CARS[selectedCar];
+  const speed = car.speed + upgrade * 2;
 
   useEffect(() => {
-    if (screen !== "race" || !racing) return;
+    function handleKeyDown(event) {
+      if (event.code === "Space" || event.code === "ArrowUp") {
+        if (screen === "race" && !event.repeat) {
+          event.preventDefault();
+          accelerate();
+        }
+      }
+    }
 
-    const timer = setInterval(() => {
-      setRivalProgress((previous) => {
-        const next = Math.min(previous + 3, 100);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
 
-        if (next >= 100) {
-          setRacing(false);
-          setWon(false);
-          setScreen("results");
-          setMessage("Your opponent reached the finish first!");
+  useEffect(() => {
+    if (!racing) return;
+
+    let frame;
+
+    function animate(time) {
+      if (!racingRef.current) return;
+
+      if (!lastTime.current) lastTime.current = time;
+
+      const delta = Math.min((time - lastTime.current) / 1000, 0.05);
+      lastTime.current = time;
+
+      const newDistance = distanceRef.current + speed * delta * 2.5;
+      const newOpponent = opponentRef.current + (4.4 + level * 0.15) * delta;
+
+      distanceRef.current = newDistance;
+      opponentRef.current = newOpponent;
+
+      setDistance(newDistance);
+      setOpponent(newOpponent);
+
+      if (newDistance >= 100 || newOpponent >= 100) {
+        racingRef.current = false;
+        setRacing(false);
+        lastTime.current = 0;
+
+        if (newDistance >= 100 && newDistance >= newOpponent) {
+          setResult("WIN");
+          setMoney((m) => m + 1000 + level * 200);
+          setLevel((l) => l + 1);
+        } else {
+          setResult("FINISH");
+          setMoney((m) => m + 200);
         }
 
-        return next;
-      });
-    }, 600);
+        setScreen("results");
+        return;
+      }
 
-    return () => clearInterval(timer);
-  }, [screen, racing]);
-
-  function buyCar(item) {
-    if (owned.includes(item.id)) {
-      setSelected(item.id);
-      setMessage(item.name + " selected!");
-      return;
+      frame = requestAnimationFrame(animate);
     }
 
-    if (money < item.price) {
-      setMessage("Not enough cash. Win more races!");
-      return;
-    }
+    frame = requestAnimationFrame(animate);
 
-    setMoney((previous) => previous - item.price);
-    setOwned((previous) => [...previous, item.id]);
-    setSelected(item.id);
-    setMessage(item.name + " purchased!");
-  }
-
-  function upgradeCar() {
-    const cost = 300 + upgradeLevel * 250;
-
-    if (money < cost) {
-      setMessage("Not enough cash for this upgrade!");
-      return;
-    }
-
-    setMoney((previous) => previous - cost);
-    setUpgrades((previous) => ({
-      ...previous,
-      [selected]: upgradeLevel + 1,
-    }));
-    setMessage("Engine upgraded! Your car is faster.");
-  }
+    return () => cancelAnimationFrame(frame);
+  }, [racing, speed, level]);
 
   function startRace() {
-    setPlayerProgress(0);
-    setRivalProgress(0);
-    setWon(false);
-    setMessage("");
-    setScreen("race");
+    distanceRef.current = 0;
+    opponentRef.current = 0;
+    lastTime.current = 0;
+
+    setDistance(0);
+    setOpponent(0);
+    setResult("");
+    racingRef.current = true;
     setRacing(true);
+    setScreen("race");
   }
 
   function accelerate() {
-    if (!racing) return;
+    if (!racingRef.current) return;
 
-    const next = Math.min(100, playerProgress + 5 + speed / 15);
-    setPlayerProgress(next);
-
-    if (next >= 100) {
-      setRacing(false);
-      setWon(true);
-      setScreen("results");
-      setMoney((previous) => previous + 500);
-      setLevel((previous) => previous + 1);
-      setMessage("Amazing driving! You won $500!");
-    }
+    distanceRef.current = Math.min(100, distanceRef.current + 2);
+    setDistance(distanceRef.current);
   }
 
-  const panel = {
-    background: "#141c2b",
-    border: "1px solid #303d52",
-    borderRadius: 14,
-    padding: 20,
+  function buyCar(index) {
+    const chosen = CARS[index];
+
+    if (owned.includes(index)) {
+      setSelectedCar(index);
+      return;
+    }
+
+    if (money < chosen.price) {
+      alert("Not enough cash! Win more races to earn money.");
+      return;
+    }
+
+    setMoney((m) => m - chosen.price);
+    setOwned((old) => [...old, index]);
+    setSelectedCar(index);
+  }
+
+  function upgradeCar() {
+    const cost = (upgrade + 1) * 1000;
+
+    if (money < cost) {
+      alert("Not enough cash! Win a race first.");
+      return;
+    }
+
+    setMoney((m) => m - cost);
+    setUpgrade((u) => u + 1);
+  }
+
+  function resetGame() {
+    racingRef.current = false;
+    setRacing(false);
+    setScreen("home");
+  }
+
+  const page = {
+    minHeight: "100vh",
+    background: "#080b12",
+    color: "#f5f7ff",
+    fontFamily: "Arial, sans-serif",
+    padding: "20px",
+    boxSizing: "border-box",
   };
 
   const button = {
-    background: "#ff4058",
+    padding: "13px 18px",
+    border: "none",
+    borderRadius: "7px",
+    background: "#ff4057",
     color: "white",
-    border: 0,
-    borderRadius: 8,
-    padding: "12px 18px",
-    fontWeight: 800,
+    fontWeight: "bold",
     cursor: "pointer",
-    fontSize: 13,
+    margin: "5px",
   };
 
-  const secondary = {
-    ...button,
-    background: "#29364b",
+  const panel = {
+    background: "#151d2d",
+    border: "1px solid #303c52",
+    borderRadius: "12px",
+    padding: "20px",
+    marginBottom: "15px",
   };
 
-  function backHome() {
-    setRacing(false);
-    setScreen("home");
-    setMessage("");
+  function Header() {
+    return (
+      <header style={{ ...panel, display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h1 style={{ margin: "0 0 5px", color: "#ff4057", letterSpacing: "2px" }}>
+            STREET RUSH X
+          </h1>
+          <small style={{ color: "#aab5ca" }}>THE STREETS ARE YOURS</small>
+        </div>
+
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "10px" }}>
+          <strong>💰 ${money.toLocaleString()}</strong>
+          <strong>⭐ LVL {level}</strong>
+        </div>
+      </header>
+    );
   }
 
   return (
-    <div className="srx">
+    <main style={page}>
       <style>{`
         * { box-sizing: border-box; }
-        body { margin: 0; background: #080c14; }
-        .srx {
-          min-height: 100vh;
-          padding: 20px;
-          background: radial-gradient(ellipse at top, #202d45, #080c14 65%);
-          color: #f5f7ff;
-          font-family: Arial, sans-serif;
+        body { margin: 0; }
+        button { transition: transform .15s, opacity .15s; }
+        button:hover { transform: translateY(-2px); opacity: .9; }
+        .race-track {
+          height: 300px;
+          position: relative;
+          overflow: hidden;
+          background: repeating-linear-gradient(90deg, #242a36 0px, #242a36 48px, #303846 49px, #303846 52px);
+          border: 4px solid #555e6c;
+          border-radius: 10px;
         }
-        .srx button { transition: transform .15s, filter .15s; }
-        .srx button:hover { filter: brightness(1.15); transform: translateY(-2px); }
-        .srx button:disabled { opacity: .5; cursor: not-allowed; }
-        .srx .wrap { max-width: 1050px; margin: auto; }
-        .srx .header {
-          display: flex; justify-content: space-between; align-items: center;
-          gap: 15px; flex-wrap: wrap; padding: 10px 0 22px;
-          border-bottom: 1px solid #303d52;
+        .road-line {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 50%;
+          border-top: 4px dashed #f7e9a4;
         }
-        .srx .logo { font-size: clamp(23px, 5vw, 36px); font-weight: 900;
-          font-style: italic; letter-spacing: 2px; margin: 0; }
-        .srx .red { color: #ff4058; }
-        .srx .stats { display: flex; flex-wrap: wrap; gap: 8px; }
-        .srx .stat { padding: 10px 13px; border-radius: 8px;
-          background: #141c2b; border: 1px solid #303d52; font-size: 13px; }
-        .srx .hero { margin-top: 24px; padding: clamp(20px, 5vw, 38px);
-          border-radius: 16px; border: 1px solid #35435b;
-          background: linear-gradient(125deg, #1b263a, #101522); }
-        .srx .hero h2 { font-size: clamp(30px, 6vw, 54px);
-          line-height: 1.1; margin: 12px 0; }
-        .srx .hero p, .srx .muted { color: #aab7cc; line-height: 1.7; }
-        .srx .carArt { text-align: center; font-size: clamp(75px, 15vw, 135px);
-          padding: 15px 0; filter: drop-shadow(0 12px 18px #ff405833); }
-        .srx .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 14px; margin-top: 18px; }
-        .srx .card { background: #141c2b; border: 1px solid #303d52;
-          border-radius: 12px; padding: 18px; min-width: 0; }
-        .srx .card h3 { margin: 10px 0; }
-        .srx .carIcon { font-size: 53px; text-align: center; padding: 12px 0; }
-        .srx .page { max-width: 850px; margin: 25px auto; }
-        .srx .row { display: flex; justify-content: space-between;
-          align-items: center; gap: 12px; flex-wrap: wrap; }
-        .srx .bar { height: 15px; background: #303d52; border-radius: 20px;
-          overflow: hidden; margin: 10px 0 20px; }
-        .srx .fill { height: 100%; background: linear-gradient(90deg,#ff4058,#ffb14c);
-          transition: width .2s; }
-        .srx .notice { color: #ffd36a; margin-top: 16px; font-size: 14px; }
-        .srx .tag { color: #ff7a8b; font-size: 11px; font-weight: 800; letter-spacing: 2px; }
-        @media (max-width: 650px) {
-          .srx { padding: 13px; }
-          .srx .grid { grid-template-columns: 1fr; }
+        .car-icon {
+          position: absolute;
+          font-size: 42px;
+          transform: scaleX(-1);
+          transition: left .1s linear;
+          filter: drop-shadow(0 4px 5px #0008);
+        }
+        .garage-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 12px;
+        }
+        @media(max-width: 520px) {
+          h1 { font-size: 24px; }
+          .race-track { height: 250px; }
         }
       `}</style>
 
-      <div className="wrap">
-        <header className="header">
-          <div>
-            <h1 className="logo">STREET <span className="red">RUSH X</span></h1>
-            <div className="tag">STREET RACING • SEASON 1</div>
-          </div>
-          <div className="stats">
-            <div className="stat">💰 ${money}</div>
-            <div className="stat">⭐ Level {level}</div>
-          </div>
-        </header>
+      <div style={{ maxWidth: "1050px", margin: "0 auto" }}>
+        <Header />
 
         {screen === "home" && (
           <>
-            <section className="hero">
-              <div className="tag">WELCOME RACER</div>
-              <div className="carArt">{car.emoji}</div>
-              <h2>RULE THE <span className="red">STREETS.</span></h2>
-              <p>
-                Choose your car, upgrade your engine, and race your way
-                to the top. Every victory brings you closer to the championship.
+            <section style={{ ...panel, padding: "30px 20px", background: "linear-gradient(130deg,#171e31,#251627)" }}>
+              <div style={{ color: "#ff5369", letterSpacing: "3px", fontWeight: "bold" }}>
+                WELCOME, RACER
+              </div>
+
+              <h2 style={{ fontSize: "clamp(32px,6vw,58px)", margin: "18px 0" }}>
+                RULE THE
+                <br />
+                STREETS.
+              </h2>
+
+              <div style={{ fontSize: "100px", textAlign: "center" }}>
+                {car.emoji}
+              </div>
+
+              <p style={{ color: "#b8c1d2", lineHeight: 1.7 }}>
+                Race your rivals. Earn cash. Collect cars. Upgrade your
+                machine and become the street racing champion.
               </p>
-              <button style={button} onClick={startRace}>🏁 START RACE</button>
-              <button style={{ ...secondary, marginLeft: 8 }}
-                onClick={() => { setMessage(""); setScreen("garage"); }}>
-                🚘 GARAGE
+
+              <button style={button} onClick={startRace}>
+                🏁 START RACE
+              </button>
+
+              <button style={{ ...button, background: "#29364c" }} onClick={() => setScreen("garage")}>
+                🚘 OPEN GARAGE
+              </button>
+
+              <button style={{ ...button, background: "#29364c" }} onClick={() => setScreen("career")}>
+                🏆 CAREER
               </button>
             </section>
 
-            <div className="grid">
-              <div className="card">
-                <div style={{ fontSize: 30 }}>🏁</div>
-                <h3>CAREER</h3>
-                <p className="muted">Race your rivals and increase your level.</p>
-                <button style={secondary} onClick={startRace}>Race now</button>
-              </div>
-              <div className="card">
-                <div style={{ fontSize: 30 }}>🔧</div>
-                <h3>GARAGE</h3>
-                <p className="muted">Collect cars and improve engine speed.</p>
-                <button style={secondary}
-                  onClick={() => { setMessage(""); setScreen("garage"); }}>
-                  Open garage
-                </button>
-              </div>
-              <div className="card">
-                <div style={{ fontSize: 30 }}>🏆</div>
-                <h3>CHAMPION</h3>
-                <p className="muted">Win races to earn $500 and level up.</p>
-                <strong className="red">LEVEL {level}</strong>
-              </div>
+            <div style={panel}>
+              <h3>YOUR DRIVER PROFILE</h3>
+              <p>Current car: {car.name}</p>
+              <p>Cars collected: {owned.length} / {CARS.length}</p>
+              <p>Engine upgrades: {upgrade}</p>
+              <p>Career level: {level}</p>
             </div>
           </>
         )}
 
         {screen === "garage" && (
-          <section className="page">
-            <button style={secondary} onClick={backHome}>← HOME</button>
-            <h2>YOUR <span className="red">GARAGE</span></h2>
-            <p className="muted">Buy cars, choose your ride, and upgrade its engine.</p>
+          <section style={panel}>
+            <button style={{ ...button, background: "#29364c" }} onClick={() => setScreen("home")}>
+              ← BACK
+            </button>
 
-            <div style={panel}>
-              <div className="carArt">{car.emoji}</div>
-              <h2 style={{ textAlign: "center" }}>{car.name}</h2>
-              <div className="row">
-                <span>Engine speed</span>
-                <strong className="red">{speed} / 100</strong>
-              </div>
-              <div className="bar">
-                <div className="fill" style={{ width: `${speed}%` }} />
-              </div>
-              <div className="row">
-                <span>Engine upgrades: {upgradeLevel}</span>
-                <button style={button} onClick={upgradeCar}>
-                  🔧 UPGRADE — ${300 + upgradeLevel * 250}
-                </button>
-              </div>
-            </div>
+            <h2>🚘 YOUR GARAGE</h2>
+            <p style={{ color: "#b8c1d2" }}>
+              Select a car you own or purchase a new racing machine.
+            </p>
 
-            <h3>CHOOSE YOUR CAR</h3>
-            <div className="grid">
-              {cars.map((item) => {
-                const isOwned = owned.includes(item.id);
+            <div className="garage-grid">
+              {CARS.map((item, index) => {
+                const isOwned = owned.includes(index);
+                const isSelected = selectedCar === index;
+
                 return (
-                  <div className="card" key={item.id}
-                    style={{ borderColor: selected === item.id ? "#ff4058" : "#303d52" }}>
-                    <div className="carIcon">{item.emoji}</div>
-                    <h3>{item.name}</h3>
-                    <p className="muted">Base speed: {item.speed}</p>
-                    <p>{isOwned ? "✅ Owned" : `💰 $${item.price}`}</p>
-                    <button style={isOwned ? secondary : button}
-                      onClick={() => buyCar(item)}>
-                      {selected === item.id ? "SELECTED" : isOwned ? "SELECT CAR" : "BUY CAR"}
+                  <div key={item.name} style={{
+                    ...panel,
+                    margin: 0,
+                    borderColor: isSelected ? item.color : "#303c52",
+                  }}>
+                    <div style={{ fontSize: "60px", textAlign: "center", margin: "12px 0" }}>
+                      {item.emoji}
+                    </div>
+
+                    <h3 style={{ color: item.color }}>{item.name}</h3>
+                    <p>Engine speed: {item.speed}</p>
+                    <p>Price: {item.price === 0 ? "FREE" : "$" + item.price.toLocaleString()}</p>
+
+                    {isSelected && <p style={{ color: "#52f5b0" }}>✓ SELECTED</p>}
+
+                    <button style={button} onClick={() => buyCar(index)}>
+                      {isSelected ? "SELECTED" : isOwned ? "SELECT CAR" : "BUY CAR"}
                     </button>
                   </div>
                 );
               })}
             </div>
-            {message && <p className="notice">{message}</p>}
+
+            <div style={{ ...panel, marginTop: "20px" }}>
+              <h3>🔧 ENGINE UPGRADE</h3>
+              <p>Current upgrade level: {upgrade}</p>
+              <p>Extra speed: +{upgrade * 2}</p>
+              <p>Next upgrade cost: ${(upgrade + 1) * 1000}</p>
+              <button style={button} onClick={upgradeCar}>UPGRADE ENGINE</button>
+            </div>
+          </section>
+        )}
+
+        {screen === "career" && (
+          <section style={panel}>
+            <button style={{ ...button, background: "#29364c" }} onClick={() => setScreen("home")}>
+              ← BACK
+            </button>
+
+            <h2>🏆 RACING CAREER</h2>
+            <p>Driver level: {level}</p>
+            <p>Money earned and available: ${money.toLocaleString()}</p>
+            <p>Cars unlocked: {owned.length} / {CARS.length}</p>
+            <p>Win races to earn cash and increase your driver level.</p>
+            <button style={button} onClick={startRace}>START NEXT RACE</button>
           </section>
         )}
 
         {screen === "race" && (
-          <section className="page">
-            <div className="row">
-              <h2>STREET <span className="red">RACE</span></h2>
-              <span className="tag">PRIZE: $500</span>
+          <section style={panel}>
+            <h2>🏁 STREET RACE</h2>
+            <p>Car: {car.name} | Speed rating: {speed}</p>
+
+            <div className="race-track">
+              <div className="road-line" />
+
+              <div style={{ position: "absolute", top: "15px", left: "12px", color: "white" }}>
+                YOU
+              </div>
+
+              <div className="car-icon" style={{ top: "50px", left: `${Math.min(distance, 90)}%` }}>
+                {car.emoji}
+              </div>
+
+              <div style={{ position: "absolute", top: "155px", left: "12px", color: "white" }}>
+                RIVAL
+              </div>
+
+              <div className="car-icon" style={{ top: "185px", left: `${Math.min(opponent, 90)}%` }}>
+                🏎️
+              </div>
+
+              <div style={{ position: "absolute", right: "10px", top: "10px", color: "#ffd166" }}>
+                FINISH 🏁
+              </div>
             </div>
-            <p className="muted">Tap ACCELERATE to push your car to the finish line before your rival.</p>
 
-            <div style={panel}>
-              <div className="row">
-                <strong>YOU — {car.name}</strong>
-                <span>{Math.floor(playerProgress)}%</span>
-              </div>
-              <div className="carArt" style={{ textAlign: "left" }}>{car.emoji}</div>
-              <div className="bar">
-                <div className="fill" style={{ width: `${playerProgress}%` }} />
+            <div style={{ ...panel, marginTop: "15px" }}>
+              <p>YOUR PROGRESS: {Math.floor(distance)}%</p>
+              <div style={{ height: "12px", background: "#303c52", borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ width: `${distance}%`, height: "100%", background: "#52f5b0" }} />
               </div>
 
-              <div className="row">
-                <strong>RIVAL — TURBO</strong>
-                <span>{Math.floor(rivalProgress)}%</span>
+              <p>RIVAL PROGRESS: {Math.floor(opponent)}%</p>
+              <div style={{ height: "12px", background: "#303c52", borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ width: `${opponent}%`, height: "100%", background: "#ff4057" }} />
               </div>
-              <div className="carArt" style={{ textAlign: "left" }}>🚙</div>
-              <div className="bar">
-                <div className="fill" style={{ width: `${rivalProgress}%`, background: "#6a8dff" }} />
-              </div>
-
-              <button style={{ ...button, width: "100%", padding: 18, fontSize: 16 }}
-                onClick={accelerate} disabled={!racing}>
-                {racing ? "⚡ ACCELERATE!" : "RACE FINISHED"}
-              </button>
-              <p className="muted">Keep tapping to accelerate. Your rival keeps moving!</p>
             </div>
-            {!racing && (
-              <button style={{ ...secondary, marginTop: 15 }} onClick={backHome}>
-                RETURN HOME
-              </button>
-            )}
+
+            <button style={{ ...button, padding: "20px 30px", fontSize: "16px" }} onClick={accelerate}>
+              🚀 ACCELERATE!
+            </button>
+
+            <p style={{ color: "#b8c1d2" }}>
+              Hold the SPACE BAR or UP ARROW to accelerate. You can also tap
+              the button.
+            </p>
+
+            <button
+              style={{ ...button, background: "#29364c" }}
+              onClick={() => {
+                racingRef.current = false;
+                setRacing(false);
+                setScreen("home");
+              }}
+            >
+              QUIT RACE
+            </button>
           </section>
         )}
 
         {screen === "results" && (
-          <section className="page" style={{ textAlign: "center", padding: 30 }}>
-            <div style={{ fontSize: 75 }}>{won ? "🏆" : "🏁"}</div>
-            <h2>{won ? "YOU WON!" : "RACE OVER"}</h2>
-            <p className="muted">
-              {won
-                ? "Excellent driving! $500 has been added to your garage funds."
-                : "Your rival won this round. Upgrade your car and try again!"}
-            </p>
-            <div style={panel}>
-              <h3>YOUR CASH</h3>
-              <div style={{ fontSize: 32, color: "#65f0a5", fontWeight: 900 }}>
-                ${money}
-              </div>
-              <p>Level {level} • {car.name}</p>
-            </div>
-            <button style={{ ...button, margin: 8 }} onClick={startRace}>RACE AGAIN</button>
-            <button style={{ ...secondary, margin: 8 }}
-              onClick={() => { setMessage(""); setScreen("garage"); }}>
+          <section style={{ ...panel, textAlign: "center", padding: "40px 20px" }}>
+            <div style={{ fontSize: "75px" }}>{result === "WIN" ? "🏆" : "🏁"}</div>
+
+            <h2 style={{ color: result === "WIN" ? "#52f5b0" : "#ffb84d" }}>
+              {result === "WIN" ? "YOU WON!" : "RACE FINISHED"}
+            </h2>
+
+            <p>{result === "WIN" ? "Amazing driving! You beat your rival." : "Good effort! Keep racing to earn more money."}</p>
+
+            <h3 style={{ color: "#ffd166" }}>
+              {result === "WIN" ? "+$" + (1000 + level * 200) : "+$200"}
+            </h3>
+
+            <button style={button} onClick={startRace}>RACE AGAIN</button>
+            <button style={{ ...button, background: "#29364c" }} onClick={() => setScreen("garage")}>
               VISIT GARAGE
             </button>
-            <button style={{ ...secondary, margin: 8 }} onClick={backHome}>HOME</button>
+            <button style={{ ...button, background: "#29364c" }} onClick={resetGame}>
+              MAIN MENU
+            </button>
           </section>
         )}
 
-        {message && screen !== "results" && screen !== "garage" && (
-          <p className="notice">{message}</p>
-        )}
-
-        <footer style={{ textAlign: "center", color: "#75839b", padding: "30px 0", fontSize: 12 }}>
-          STREET RUSH X • Build your garage. Own the streets.
+        <footer style={{ textAlign: "center", padding: "20px", color: "#6f7d94", fontSize: "12px" }}>
+          STREET RUSH X · BUILD YOUR LEGEND
         </footer>
       </div>
-    </div>
+    </main>
   );
 }
+
+export default App;
