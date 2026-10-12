@@ -2,9 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./styles.css";
 
-const DATABASE_URL = "PASTE_YOUR_FIREBASE_DATABASE_URL_HERE";
-// Example format: https://your-database-name-default-rtdb.firebaseio.com
-// Do not add / at the end.
+const DATABASE_URL ="https://treasure-rush-x-default-rtdb.firebaseio.com";
 
 const THREE_URL =
   "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
